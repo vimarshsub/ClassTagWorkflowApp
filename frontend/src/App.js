@@ -8,6 +8,11 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentView, setCurrentView] = useState('initial'); // 'initial' or 'mainApp'
+
+  const handleProceedToApp = () => {
+    setCurrentView('mainApp');
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -27,24 +32,37 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        // If data.error exists, use it, otherwise use a generic HTTP error
         const errorMessage = data && data.error ? data.error : `HTTP error! status: ${response.status}`;
         throw new Error(errorMessage);
       }
       
-      // Assuming 'data' from backend is the announcements_content object which has an 'edges' array
-      // Each edge has a 'node' which is the actual announcement
       setAnnouncements(data.edges && Array.isArray(data.edges) ? data.edges.map(edge => edge.node) : []);
       setIsLoggedIn(true);
-      setError(null); // Clear any previous errors
+      setError(null);
     } catch (err) {
       console.error("Login/Fetch error:", err);
       setError(err.message || "Failed to login or fetch announcements. Please check credentials and backend.");
-      setAnnouncements([]); // Clear announcements on error
+      setAnnouncements([]);
       setIsLoggedIn(false);
     }
     setIsLoading(false);
   };
+
+  if (currentView === 'initial') {
+    return (
+      <div className="App">
+        <header className="App-header">
+          <h1>Welcome to ClassTag Workflow</h1>
+        </header>
+        <main style={{ textAlign: 'center', marginTop: '50px' }}>
+          <p>Click the button below to proceed to login and view announcements.</p>
+          <button onClick={handleProceedToApp} style={{ padding: '10px 20px', fontSize: '16px' }}>
+            Load Announcements
+          </button>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="App">
