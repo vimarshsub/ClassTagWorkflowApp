@@ -16,7 +16,7 @@ function App() {
     console.log("Attempting to login and fetch announcements with:", { username });
 
     try {
-      const response = await fetch('https://5001-ijwyyorxswhqsvfc4w4u2-3f35671a.manus.computer/api/fetch-and-save-announcements', {
+      const response = await fetch("https://dual-lorna-vimarshsub-a52bff93.koyeb.app/api/fetch-and-save-announcements", {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
