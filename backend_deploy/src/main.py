@@ -93,7 +93,6 @@ def fetch_and_save_announcements():
                 try:
                     airtable_record = {
                         "AnnouncementId": str(node.get("dbId")),
-                        "SentTime": node.get("createdAt"),
                         "Title": node.get("titleInfo", {}).get("origin"),
                         "Description": node.get("messageInfo", {}).get("origin"),
                         "SentByUser": node.get("user", {}).get("permittedName")
