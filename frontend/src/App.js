@@ -13,6 +13,9 @@ function App() {
   const [testLoading, setTestLoading] = useState(false);
   const [testError, setTestError] = useState(null);
   const [testMessage, setTestMessage] = useState('');
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [endCursor, setEndCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const handleProceedToApp = () => {
     setCurrentView('mainApp');
@@ -27,7 +30,7 @@ function App() {
     try {
       console.log("=== FRONTEND DEBUG LOGS ===");
       console.log("1. Sending request to backend with credentials:", { username, password: "***" });
-      const response = await fetch("http://localhost:5001/api/fetch-and-save-announcements", {
+      const response = await fetch("http://localhost:5001/api/fetch-announcements", {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -36,7 +39,8 @@ function App() {
         },
         body: JSON.stringify({ 
           username: username,
-          password: password
+          password: password,
+          itemsPerPage: 20
         }),
       });
 
@@ -56,6 +60,8 @@ function App() {
         console.log("6. Found announcements array with length:", data.announcements.length);
         console.log("7. First announcement:", data.announcements[0]);
         setAnnouncements(data.announcements);
+        setHasNextPage(data.hasNextPage || false);
+        setEndCursor(data.endCursor || null);
       } else if (data.edges && Array.isArray(data.edges)) {
         console.log("6. Found edges array with length:", data.edges.length);
         const announcements = data.edges.map(edge => edge.node);
@@ -159,6 +165,45 @@ function App() {
     }
   };
 
+  const handleLoadMore = async () => {
+    if (!endCursor || !hasNextPage || loadingMore) return;
+    
+    setLoadingMore(true);
+    try {
+      console.log("Loading more announcements with cursor:", endCursor);
+      const response = await fetch("http://localhost:5001/api/load-more-announcements", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          username,
+          password,
+          afterCursor: endCursor,
+          itemsPerPage: 20
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
+      
+      if (data.announcements && Array.isArray(data.announcements)) {
+        setAnnouncements(prev => [...prev, ...data.announcements]);
+        setHasNextPage(data.hasNextPage || false);
+        setEndCursor(data.endCursor || null);
+      }
+    } catch (err) {
+      console.error("Error loading more announcements:", err);
+      setError("Failed to load more announcements: " + err.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   if (currentView === 'initial') {
     return (
       <div className="App">
@@ -246,37 +291,59 @@ function App() {
             {isLoading && <p>Loading announcements...</p>}
             {error && <p className="error" style={{color: 'red'}}>{error}</p>}
             {announcements.length > 0 ? (
-              announcements.map(ann => (
-                <div key={ann.id} style={{border: '1px solid #ccc', margin: '10px', padding: '10px'}}>
-                  <h3>{ann.title || "No Title"}</h3>
-                  <div dangerouslySetInnerHTML={{ __html: ann.message || "No Message" }} />
-                  <p><small>Sent by: User ID {ann.user && ann.user.id ? ann.user.id : "N/A"} on {ann.createdAt ? new Date(ann.createdAt).toLocaleDateString() : "N/A"}</small></p>
-                  <p><small>Announcement ID: {ann.dbId || "N/A"}</small></p>
-                  <p><small>Documents Count: {ann.documentsCount || 0}</small></p>
-                  {ann.documents && ann.documents.length > 0 ? (
-                    <div style={{marginTop: '10px', padding: '10px', backgroundColor: '#f0f0f0'}}>
-                      <h4>📎 Attached Documents ({ann.documents.length}):</h4>
-                      <ul style={{listStyle: 'none', padding: 0}}>
-                        {ann.documents.map(doc => (
-                          <li key={doc.id} style={{margin: '5px 0'}}>
-                            <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" style={{color: 'blue', textDecoration: 'underline'}}>
-                              📄 {doc.fileFilename} ({doc.contentType})
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
+              <div>
+                {announcements.map(ann => (
+                  <div key={ann.id} style={{border: '1px solid #ccc', margin: '10px', padding: '10px'}}>
+                    <h3>{ann.title || "No Title"}</h3>
+                    <div dangerouslySetInnerHTML={{ __html: ann.message || "No Message" }} />
+                    <p><small>Sent by: User ID {ann.user && ann.user.id ? ann.user.id : "N/A"} on {ann.createdAt ? new Date(ann.createdAt).toLocaleDateString() : "N/A"}</small></p>
+                    <p><small>Announcement ID: {ann.dbId || "N/A"}</small></p>
+                    <p><small>Documents Count: {ann.documentsCount || 0}</small></p>
+                    {ann.documents && ann.documents.length > 0 ? (
+                      <div style={{marginTop: '10px', padding: '10px', backgroundColor: '#f0f0f0'}}>
+                        <h4>📎 Attached Documents ({ann.documents.length}):</h4>
+                        <ul style={{listStyle: 'none', padding: 0}}>
+                          {ann.documents.map(doc => (
+                            <li key={doc.id} style={{margin: '5px 0'}}>
+                              <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" style={{color: 'blue', textDecoration: 'underline'}}>
+                                📄 {doc.fileFilename} ({doc.contentType})
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <p style={{color: '#666'}}>No documents attached</p>
+                    )}
+                    <div style={{marginTop: '10px', fontSize: '12px', color: '#666'}}>
+                      <p>Debug Info:</p>
+                      <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-all'}}>
+                        {JSON.stringify(ann, null, 2)}
+                      </pre>
                     </div>
-                  ) : (
-                    <p style={{color: '#666'}}>No documents attached</p>
-                  )}
-                  <div style={{marginTop: '10px', fontSize: '12px', color: '#666'}}>
-                    <p>Debug Info:</p>
-                    <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-all'}}>
-                      {JSON.stringify(ann, null, 2)}
-                    </pre>
                   </div>
-                </div>
-              ))
+                ))}
+                
+                {hasNextPage && (
+                  <div style={{textAlign: 'center', margin: '20px 0'}}>
+                    <button 
+                      onClick={handleLoadMore} 
+                      disabled={loadingMore}
+                      style={{
+                        padding: '10px 20px', 
+                        fontSize: '16px',
+                        backgroundColor: '#4CAF50',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: loadingMore ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {loadingMore ? 'Loading more...' : 'Load More Announcements'}
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               !isLoading && <p>No announcements found or returned.</p>
             )}
