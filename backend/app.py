@@ -130,79 +130,26 @@ def fetch_announcement_documents(session, announcement_id, username, password):
             logger.info(f"Login payload: {json.dumps(login_payload, indent=2)}")
             
             login_response = session.post(SCHOOLSTATUS_GRAPHQL_URL, json=login_payload, headers=headers, timeout=30)
-            
-            logger.info("\n=== SCHOOLSTATUS LOGIN RESPONSE ===")
-            logger.info(f"Status code: {login_response.status_code}")
-            logger.info(f"Response headers: {dict(login_response.headers)}")
-            logger.info(f"Response cookies: {dict(login_response.cookies)}")
-            logger.info(f"Raw response text: {login_response.text}")
-            
             login_response.raise_for_status()
             login_data = login_response.json()
-
+            
             if login_data.get("errors"):
                 error_message = login_data["errors"][0]["message"]
-                logger.error(f"\n❌ SCHOOLSTATUS LOGIN GRAPHQL ERROR: {error_message}")
+                logger.error(f"\n❌ LOGIN ERROR: {error_message}")
                 return None
-            
-            if login_data.get("data", {}).get("sessionCreate", {}).get("error"):
-                error_message = login_data["data"]["sessionCreate"]["error"]
-                logger.error(f"\n❌ SCHOOLSTATUS LOGIN ERROR (sessionCreate): {error_message}")
+                
+            if not login_data.get("data", {}).get("sessionCreate", {}).get("user"):
+                logger.error("\n❌ LOGIN FAILED: No user data in response")
                 return None
                 
             logger.info("\n✅ SCHOOLSTATUS LOGIN SUCCESSFUL")
             logger.info(f"Session cookies: {session.cookies.get_dict()}")
-
-        except requests.exceptions.RequestException as e_login_req:
-            logger.error("Login RequestException Details:", exc_info=True)
-            return None
-        except json.JSONDecodeError as e_login_json:
-            logger.error("Login JSONDecodeError Details:", exc_info=True)
-            logger.error(f"Failed to parse SchoolStatus login response. Response text: {login_response.text if login_response else None}")
-            return None
-        
-        # First verify if the announcement exists and is accessible
-        verify_payload = {
-            "query": """
-                query AnnouncementQuery($id: ID!) {
-                    announcement(id: $id) {
-                        id
-                        dbId
-                        deletedAt
-                    }
-                }
-            """,
-            "variables": {
-                "id": f"Announcement:{announcement_id}"
-            }
-        }
-
-        try:
-            logger.info("\n=== VERIFYING ANNOUNCEMENT ACCESS ===")
-            verify_response = session.post(SCHOOLSTATUS_GRAPHQL_URL, json=verify_payload, headers=headers, timeout=30)
-            verify_data = verify_response.json()
-            
-            if verify_data.get("errors"):
-                error_message = verify_data["errors"][0]["message"]
-                logger.error(f"\n❌ ANNOUNCEMENT VERIFICATION ERROR: {error_message}")
-                return None
-                
-            announcement_data = verify_data.get("data", {}).get("announcement")
-            if not announcement_data:
-                logger.error("\n❌ ANNOUNCEMENT NOT FOUND OR NOT ACCESSIBLE")
-                return None
-                
-            if announcement_data.get("deletedAt"):
-                logger.error(f"\n❌ ANNOUNCEMENT IS DELETED (deletedAt: {announcement_data['deletedAt']})")
-                return None
-                
-            logger.info("\n✅ ANNOUNCEMENT VERIFIED AND ACCESSIBLE")
             
         except Exception as e:
-            logger.error(f"\n❌ ERROR VERIFYING ANNOUNCEMENT: {str(e)}", exc_info=True)
+            logger.error(f"\n❌ LOGIN ERROR: {str(e)}", exc_info=True)
             return None
-        
-        # Now fetch the documents
+
+        # Now fetch the documents directly
         documents_payload = {
             "query": """
                 query AnnouncementDocumentsQuery($id: ID!) {
@@ -219,7 +166,7 @@ def fetch_announcement_documents(session, announcement_id, username, password):
                 }
             """,
             "variables": {
-                "id": f"Announcement:{announcement_id}"
+                "id": announcement_id
             }
         }
 
